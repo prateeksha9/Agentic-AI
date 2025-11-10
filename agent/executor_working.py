@@ -1,10 +1,9 @@
 # agent/executor.py
 import asyncio
-import os
-import re
 from rich import print
 from pathlib import Path
 from datetime import datetime
+import os
 
 from browser.playwright_setup import get_browser_context, save_cookies
 from agent.capture import capture_state
@@ -12,45 +11,16 @@ from utils.dataset_summary import generate_summary
 from agent.planner import repair_plan
 
 
-async def execute_plan(
-    plan,
-    app_name="todomvc",
-    task_description=None,
-    repair_attempts=0,
-    max_repairs=3
-):
-    """Execute DSL plan in browser with self-repair and dataset capture."""
-
+async def execute_plan(plan, app_name="todomvc", repair_attempts=0, max_repairs=3):
+    """Execute DSL plan in browser with self-repair and stable UI handling."""
     async_playwright, browser, context, page, cookie_path = await get_browser_context(app_name)
 
-    # 🧱 Base dataset directory
-    base_app_dir = Path(f"dataset/{app_name}")
-    base_app_dir.mkdir(parents=True, exist_ok=True)
-
-    # 🧩 Create a clean descriptive folder name from user input
-    # 🧩 Create a clean descriptive folder name from user input
-    def sanitize_name(text: str):
-        """Convert arbitrary user task into safe folder name"""
-        import re  # ✅ move here to ensure it always resolves in function scope
-        text = re.sub(r'[^a-zA-Z0-9]+', '_', text.lower()).strip("_")
-        return text[:50] if text else "run"
-
-
-    label = sanitize_name(task_description or getattr(plan, "task_description", "run"))
-
-    # 🧮 Find next available run number
-    existing_runs = [p for p in base_app_dir.glob("run_*") if p.is_dir()]
-    next_index = len(existing_runs) + 1
-
-    run_id = f"run_{next_index:02d}_{label}"
-    base_dir = base_app_dir / run_id
+    # Create a consistent per-run dataset folder
+    run_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    base_dir = Path(f"dataset/{app_name}/{run_id}")
     base_dir.mkdir(parents=True, exist_ok=True)
-
     print(f"[blue]📁 Starting dataset capture: {base_dir}[/blue]")
 
-    # ==============================
-    # Main plan execution loop
-    # ==============================
     step_index = 0
     while step_index < len(plan):
         step = plan[step_index]
@@ -60,19 +30,21 @@ async def execute_plan(
         print(f"[cyan]{step_index + 1}. Executing:[/cyan] {action} → {target or ''} {value or ''}")
 
         try:
-            # ---------- OPEN ----------
+            # ============ ACTIONS ============
+
+            # 🟢 OPEN PAGE
             if action == "open":
                 await page.goto(target, wait_until="domcontentloaded", timeout=60000)
                 await page.wait_for_timeout(2000)
                 print(f"[green]Opened {target}[/green]")
                 await capture_state(page, step_index + 1, "open", app_name, base_dir)
 
-            # ---------- CLICK ----------
+            # 🟢 CLICK ELEMENT
             elif action == "find_and_click":
                 target_norm = target.lower().replace("'", "").replace('"', "")
                 locator = None
 
-                # Specific matches
+                # Handle common button variations
                 if "add to cart" in target_norm:
                     locator = page.locator('button:has-text("Add to cart")')
                 elif "remove" in target_norm:
@@ -80,7 +52,7 @@ async def execute_plan(
                 elif "cart" in target_norm:
                     locator = page.locator("a.shopping_cart_link")
 
-                # Generic fallback
+                # Fallback generic locators
                 if not locator or not await locator.count():
                     locator = page.get_by_text(target)
 
@@ -93,64 +65,9 @@ async def execute_plan(
                 else:
                     raise Exception(f"Could not locate element for target: {target}")
 
-            # ---------- FILL ----------
-            # elif action == "fill":
-            #     target = (target or "").strip().lower()
-            #     value = (value or "").strip()
-
-            #     if not value:
-            #         print(f"[yellow]⚠️ No value provided to fill for: {target}[/yellow]")
-            #         step_index += 1
-            #         continue
-
-            #     locator = None
-            #     try_selectors = []
-
-            #     # Direct selector check
-            #     if target.startswith(("#", ".", "input", "textarea", "[", "css=", "//")):
-            #         try_selectors.append(target.replace("css=", "").strip())
-
-            #     # Heuristic search
-            #     try_selectors += [
-            #         f"input[placeholder*='{target}']",
-            #         f"input[aria-label*='{target}']",
-            #         f"input[name*='{target}']",
-            #         "input[type='text']",
-            #         "textarea",
-            #         "input"
-            #     ]
-            #     try_selectors = list(dict.fromkeys(try_selectors))
-
-            #     for sel in try_selectors:
-            #         locator = page.locator(sel)
-            #         try:
-            #             if await locator.count():
-            #                 await locator.first.scroll_into_view_if_needed()
-            #                 await locator.first.wait_for(state="visible", timeout=2000)
-            #                 break
-            #         except:
-            #             continue
-
-            #     # Semantic fallback
-            #     if not locator or not await locator.count():
-            #         locator = page.get_by_placeholder(target)
-            #     if not locator or not await locator.count():
-            #         locator = page.get_by_label(target)
-
-            #     # Last resort
-            #     if not locator or not await locator.count():
-            #         locator = page.locator("input:not([type=hidden]), textarea").first
-
-            #     if not locator or not await locator.count():
-            #         raise Exception(f"Could not locate any fillable input for: {target}")
-
-            #     await locator.first.fill(value)
-            #     print(f"[green]Filled {target or '[detected input]'} with '{value}'[/green]")
-            #     await page.wait_for_timeout(600)
-            #     await capture_state(page, step_index + 1, f"fill_{target or 'input'}", app_name, base_dir)
-
-            # ---------- FILL ----------
+            # 🟢 FILL INPUT FIELD
             elif action == "fill":
+                # Normalize and sanitize target/value
                 target = (target or "").strip().lower()
                 value = (value or "").strip()
 
@@ -159,59 +76,43 @@ async def execute_plan(
                     step_index += 1
                     continue
 
-                # ✅ Normalize credential fields to avoid case sensitivity issues
-                # Works for SauceDemo or other login pages
-                if "user" in target and value.upper() == "STANDARD_USER":
-                    value = "standard_user"
-                elif "pass" in target and value.upper() == "SECRET_SAUCE":
-                    value = "secret_sauce"
-
-                # ✅ Auto-normalize common credentials globally
-                value_map = {
-                    "STANDARD_USER": "standard_user",
-                    "SECRET_SAUCE": "secret_sauce",
-                    "LOCKED_OUT_USER": "locked_out_user",
-                    "PROBLEM_USER": "problem_user",
-                    "PERFORMANCE_GLITCH_USER": "performance_glitch_user",
-                }
-                if value in value_map:
-                    value = value_map[value]
-
                 locator = None
-                try_selectors = []
 
-                # Direct selector check
+                # Try direct selector if it looks like CSS/XPath
+                try_selectors = []
                 if target.startswith(("#", ".", "input", "textarea", "[", "css=", "//")):
                     try_selectors.append(target.replace("css=", "").strip())
 
-                # Heuristic search
+                # Generic fallbacks
                 try_selectors += [
                     f"input[placeholder*='{target}']",
                     f"input[aria-label*='{target}']",
                     f"input[name*='{target}']",
+                    f"textarea[placeholder*='{target}']",
                     "input[type='text']",
                     "textarea",
                     "input"
                 ]
                 try_selectors = list(dict.fromkeys(try_selectors))
 
+                # Try sequentially
                 for sel in try_selectors:
                     locator = page.locator(sel)
                     try:
                         if await locator.count():
                             await locator.first.scroll_into_view_if_needed()
-                            await locator.first.wait_for(state="visible", timeout=2000)
+                            await locator.first.wait_for(state="visible", timeout=3000)
                             break
-                    except:
+                    except Exception:
                         continue
 
-                # Semantic fallback
+                # Try semantic fallback
                 if not locator or not await locator.count():
                     locator = page.get_by_placeholder(target)
                 if not locator or not await locator.count():
                     locator = page.get_by_label(target)
 
-                # Last resort
+                # Final fallback
                 if not locator or not await locator.count():
                     locator = page.locator("input:not([type=hidden]), textarea").first
 
@@ -223,8 +124,7 @@ async def execute_plan(
                 await page.wait_for_timeout(600)
                 await capture_state(page, step_index + 1, f"fill_{target or 'input'}", app_name, base_dir)
 
-
-            # ---------- LOGIN ----------
+            # 🟢 SMART LOGIN FLOW (explicit "login" action)
             elif action == "login":
                 print("[blue]Initiating smart login sequence...[/blue]")
                 await page.goto("https://www.saucedemo.com/", wait_until="domcontentloaded", timeout=60000)
@@ -235,54 +135,78 @@ async def execute_plan(
                 await page.fill("#password", "secret_sauce")
                 await page.click("#login-button")
 
+                # Wait until inventory page loads
                 await page.wait_for_url("**/inventory.html", timeout=10000)
                 print(f"[green]✅ Logged in successfully[/green]")
                 await capture_state(page, step_index + 1, "login_success", app_name, base_dir)
                 await page.wait_for_timeout(1000)
 
-            # ---------- PRESS ----------
+            # 🟢 PRESS (keyboard or button)
             elif action == "press":
                 target_norm = target.lower().strip()
+
+                # 1️⃣ Keyboard key
                 if target_norm in ["enter", "tab", "escape", "space"]:
-                    field = await page.query_selector("input, textarea")
-                    if field:
-                        await field.focus()
-                    await page.keyboard.press(target_norm.capitalize())
-                    print(f"[green]Pressed key: {target_norm}[/green]")
+                    try:
+                        input_field = await page.query_selector("input[placeholder], input, textarea")
+                        if input_field:
+                            await input_field.focus()
+                            print("[blue]Focused on input field before pressing key[/blue]")
+                        await page.keyboard.press(target_norm.capitalize())
+                        print(f"[green]Pressed key: {target_norm}[/green]")
+                    except Exception as e:
+                        raise Exception(f"Key press failed: {e}")
+
+                # 2️⃣ Clickable element (button or selector)
+                elif target_norm.startswith(("#", ".", "button")):
+                    try:
+                        locator = page.locator(target_norm)
+                        if not await locator.count():
+                            locator = page.get_by_text(target_norm.replace("#", "").replace(".", " ").strip())
+                        if await locator.count():
+                            await locator.first.click()
+                            print(f"[green]Clicked element: {target_norm}[/green]")
+                        else:
+                            raise Exception(f"No clickable element found for: {target_norm}")
+                    except Exception as click_error:
+                        raise Exception(f"Failed to click {target_norm}: {click_error}")
+
+                # 3️⃣ Fallback: Enter key
                 else:
-                    locator = page.locator(target_norm)
-                    if not await locator.count():
-                        locator = page.get_by_text(target_norm)
-                    if await locator.count():
-                        await locator.first.click()
-                        print(f"[green]Clicked {target_norm}[/green]")
-                    else:
+                    inputs = page.locator("input")
+                    if await inputs.count() > 0:
+                        await inputs.first.focus()
                         await page.keyboard.press("Enter")
-                        print(f"[green]Pressed Enter fallback[/green]")
+                        print(f"[green]Pressed Enter in first input[/green]")
+                    else:
+                        raise Exception(f"Unknown press target: {target}")
+
                 await page.wait_for_timeout(800)
                 await capture_state(page, step_index + 1, f"press_{target_norm}", app_name, base_dir)
 
-            # ---------- EXPECT ----------
+            # 🟢 EXPECT (verifies element or text)
             elif action == "expect":
                 import re
                 target_norm = target.strip().lower()
                 try:
                     if target_norm.startswith((".", "#")) or re.match(r"^[a-z]+\.", target_norm):
                         await page.wait_for_selector(target_norm, timeout=8000, state="visible")
-                        print(f"[green]✅ Found CSS: {target_norm}[/green]")
+                        print(f"[green]✅ Verified element present (CSS): {target_norm}[/green]")
                     elif "has-text" in target_norm:
-                        m = re.search(r"has-text\\(['\"](.+?)['\"]\\)", target_norm)
+                        m = re.search(r"has-text\(['\"](.+?)['\"]\)", target_norm)
                         if m:
                             text_value = m.group(1).strip()
                             for t in [text_value, text_value.capitalize(), text_value.upper()]:
                                 try:
-                                    await page.wait_for_selector(f'text=\"{t}\"', timeout=8000, state="visible")
-                                    print(f"[green]✅ Found text: {t}[/green]")
+                                    await page.wait_for_selector(f'text="{t}"', timeout=8000, state="visible")
+                                    print(f"[green]✅ Verified text present: {t}[/green]")
                                     break
                                 except:
                                     continue
+                        else:
+                            raise ValueError("Could not extract text from has-text selector")
                     else:
-                        for sel in [f'text=\"{target_norm}\"', f'text=\"{target_norm.capitalize()}\"']:
+                        for sel in [f'text="{target_norm}"', f'text="{target_norm.capitalize()}"']:
                             try:
                                 await page.wait_for_selector(sel, timeout=8000, state="visible")
                                 print(f"[green]✅ Verified visible text: {sel}[/green]")
@@ -290,34 +214,39 @@ async def execute_plan(
                             except:
                                 continue
                 except Exception as e:
-                    print(f"[red]❌ Expect failed for {target}: {e}[/red]")
+                    print(f"[red]❌ Could not verify: {target} — {e}[/red]")
+
+                await page.wait_for_timeout(600)
                 await capture_state(page, step_index + 1, f"expect_{target_norm}", app_name, base_dir)
 
-            # ---------- WAIT ----------
+            # 🟡 WAIT
             elif action == "wait_for":
                 await page.wait_for_timeout(1000)
-                print(f"[yellow]Waited for {target}[/yellow]")
+                print(f"[yellow]Waited briefly for: {target}[/yellow]")
 
             else:
-                print(f"[yellow]⚠️ Unknown action: {action}[/yellow]")
+                print(f"[yellow]Unknown action: {action}[/yellow]")
 
             step_index += 1
 
-        # ---------- SELF REPAIR ----------
+        # ============ SELF-REPAIR LOOP ============
         except Exception as e:
             print(f"[red]Step failed: {action} → {target}[/red]")
             print(f"[yellow]Triggering plan repair (attempt {repair_attempts + 1}/{max_repairs})...[/yellow]")
 
             if repair_attempts >= max_repairs:
-                print(f"[red]❌ Max repair attempts reached. Aborting.[/red]")
+                print(f"[red]❌ Max repair attempts ({max_repairs}) reached. Aborting.[/red]")
                 break
 
             try:
                 new_plan = repair_plan(step, str(e), plan)
-                if not new_plan or new_plan == plan:
-                    print("[red]⚠️ Repair failed or no new plan returned.[/red]")
+                if not new_plan:
+                    print("[red]⚠️ Repair failed — no new plan returned.[/red]")
                     break
-                print("[cyan]🔁 Updated plan and retrying...[/cyan]")
+                if new_plan == plan:
+                    print("[red]⚠️ LLM returned identical plan. Stopping to avoid loop.[/red]")
+                    break
+                print("[cyan]Received corrected plan from LLM. Updating plan and retrying...[/cyan]")
                 plan = new_plan
                 repair_attempts += 1
                 continue
@@ -325,14 +254,14 @@ async def execute_plan(
                 print(f"[red]Repair attempt failed: {re}[/red]")
                 break
 
-    print("[green]✅ All steps executed (with self-repair if needed).[/green]")
+    print("[green]All steps executed (with self-correction if needed).[/green]")
     await browser.close()
     await async_playwright.stop()
 
     generate_summary(base_dir)
-    print(f"[green]📊 Dataset summary generated at: {base_dir}/dataset_summary.csv[/green]")
+    print(f"[green]✅ Dataset summary generated at: {base_dir}/dataset_summary.csv[/green]")
 
 
-def run_executor(plan, app_name="todomvc", task_description=None):
+def run_executor(plan, app_name="todomvc"):
     """Sync wrapper for async Playwright execution."""
-    asyncio.run(execute_plan(plan, app_name, task_description=task_description))
+    asyncio.run(execute_plan(plan, app_name))

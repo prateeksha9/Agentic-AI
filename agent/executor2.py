@@ -3,7 +3,7 @@ import asyncio
 from rich import print
 from browser.playwright_setup import get_browser_context, save_cookies
 from pathlib import Path
-from agent.capture import capture_state
+from agent.capture1 import capture_state
 from utils.dataset_summary import generate_summary
 import os
 

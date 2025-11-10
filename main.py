@@ -2,6 +2,7 @@
 import typer
 from rich import print
 from agent.executor import run_executor
+import re
 
 # 👉 Import the new intelligent planner
 try:
@@ -34,34 +35,22 @@ def run(task: str):
 
     # Execute in browser
     print("\n[magenta]Executing plan in browser...[/magenta]\n")
-    run_executor(plan)
+    # run_executor(plan)
+
+    first_url = next((step.target for step in plan if step.action == "open"), None)
+
+    if first_url:
+        if "saucedemo" in first_url:
+            app_name = "saucedemo"
+        elif "todomvc" in first_url:
+            app_name = "todomvc"
+        else:
+            app_name = "generic"
+    else:
+        app_name = "generic"
+
+    run_executor(plan, app_name, task_description=task)
+
 
 if __name__ == "__main__":
     app()
-
-
-
-# # main.py
-# import typer
-# from rich import print
-# from agent.task_parser import parse_task_to_plan
-# from agent.executor1 import run_executor
-
-# app = typer.Typer(help="Agent B - Autonomous Browser Agent")
-
-# @app.command()
-# def run(task: str):
-#     print(f"[bold blue]AgentB starting...[/bold blue]")
-#     print(f"Received task: [green]{task}[/green]")
-#     plan = parse_task_to_plan(task)
-#     # In later phases, this will trigger planner/executor
-#     print("[yellow]Currently running in skeleton mode.[/yellow]")
-#     print("[yellow]Generated DSL Plan:[/yellow]")
-#     for step in plan:
-#         print(f"  • [cyan]{step.action}[/cyan]  →  {step.target or ''}  {step.value or ''}")
-    
-#     print("\n[magenta]Executing plan in browser...[/magenta]\n")
-#     run_executor(plan)
-
-# if __name__ == "__main__":
-#     app()
