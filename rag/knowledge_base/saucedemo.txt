@@ -1,0 +1,15 @@
+Sauce Demo (E-commerce demo):
+
+1) Open https://www.saucedemo.com/
+2) Enter username "standard_user" and password "secret_sauce".
+3) Click the "Login" button.
+4) On the products page, find an item card (e.g., "Sauce Labs Backpack").
+5) Click "Add to cart" under that item.
+6) Verify that the "Remove" button or cart icon shows an updated count.
+Selectors:
+- Username input: #user-name
+- Password input: #password
+- Login button: #login-button
+- Add to cart button: button:has-text("Add to cart")
+- Remove button: button:has-text("REMOVE")
+- Cart icon: a.shopping_cart_link

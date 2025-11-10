@@ -1,0 +1,24 @@
+```yaml
+- action: open
+  target: "https://demo.playwright.dev/todomvc"
+
+- action: fill
+  target: "What needs to be done?"
+  value: "Buy milk"
+
+- action: press
+  target: "Enter"
+
+- action: expect
+  target: "Buy milk"
+
+- action: fill
+  target: "What needs to be done?"
+  value: "Pay bills"
+
+- action: press
+  target: "Enter"
+
+- action: expect
+  target: "Pay bills"
+```

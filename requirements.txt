@@ -1,0 +1,4 @@
+typer
+playwright
+python-dotenv
+PyYAML

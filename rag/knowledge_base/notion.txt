@@ -1,0 +1,5 @@
+Create project in Notion:
+1. Open https://www.notion.so
+2. Click "New Page".
+3. Select "Table" or "Database".
+4. Name it and hit Enter.
