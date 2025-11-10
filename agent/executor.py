@@ -154,80 +154,109 @@ async def execute_plan(plan, app_name="todomvc", repair_attempts=0, max_repairs=
             # EXPECT (real verification)
             # elif action == "expect":
             #     try:
-            #         await page.wait_for_selector(f"text={target}", timeout=5000)
-            #         print(f"[green]✅ Verified presence of: {target}[/green]")
-            #     except Exception:
-            #         print(f"[red]❌ Could not verify: {target}[/red]")
-            #     await page.wait_for_timeout(500)
-            #     await capture_state(page, step_index + 1, f"expect_{target}", app_name)
-
-            # elif action == "expect":
-            #     try:
             #         target_norm = target.lower().strip()
-
-            #         # Handle CSS-like expressions
+            #         import re
+                    
+            #         # 1️⃣ Extract text inside has-text() if present
             #         if "has-text" in target_norm:
-            #             import re
-            #             # Extract text inside quotes from has-text("...")
             #             m = re.search(r"has-text\(['\"](.+?)['\"]\)", target_norm)
             #             if m:
-            #                 text_value = m.group(1)
-            #                 await page.wait_for_selector(f'text="{text_value}"', timeout=5000)
-            #                 print(f"[green]✅ Verified presence of: {text_value}[/green]")
+            #                 text_value = m.group(1).strip()
             #             else:
-            #                 raise ValueError("Could not extract text from has-text selector")
+            #                 text_value = target_norm
             #         else:
-            #             # Generic fallback: match plain visible text
-            #             await page.wait_for_selector(f"text={target}", timeout=5000)
-            #             print(f"[green]✅ Verified presence of: {target}[/green]")
+            #             text_value = target_norm
+
+            #         # 2️⃣ Try common Playwright patterns — be forgiving about case
+            #         possible_selectors = [
+            #             f'button:has-text("{text_value}")',
+            #             f'button:has-text("{text_value.capitalize()}")',
+            #             f'text="{text_value}"',
+            #             f'text="{text_value.capitalize()}"'
+            #         ]
+
+            #         found = False
+            #         for sel in possible_selectors:
+            #             try:
+            #                 await page.wait_for_selector(sel, timeout=8000, state="visible")
+            #                 print(f"[green]✅ Verified presence of element: {sel}[/green]")
+            #                 found = True
+            #                 break
+            #             except:
+            #                 continue
+
+            #         if not found:
+            #             raise Exception(f"Element not found with text '{text_value}' in any selector.")
 
             #     except Exception as e:
             #         print(f"[red]❌ Could not verify: {target} — {e}[/red]")
 
-            #     await page.wait_for_timeout(500)
+            #     await page.wait_for_timeout(600)
             #     await capture_state(page, step_index + 1, f"expect_{target}", app_name)
 
             elif action == "expect":
                 try:
-                    target_norm = target.lower().strip()
                     import re
+                    target_norm = target.strip().lower()
 
-                    # 1️⃣ Extract text inside has-text() if present
-                    if "has-text" in target_norm:
+                    # 🟢 1️⃣ Handle CSS selectors directly (e.g. .class, #id, a.class)
+                    if target_norm.startswith((".", "#")) or re.match(r"^[a-z]+\.", target_norm):
+                        await page.wait_for_selector(target_norm, timeout=8000, state="visible")
+                        print(f"[green]✅ Verified element present (CSS): {target_norm}[/green]")
+
+                    # 🟢 2️⃣ Handle :has-text("...") pattern
+                    # elif "has-text" in target_norm:
+                    #     m = re.search(r"has-text\(['\"](.+?)['\"]\)", target_norm)
+                    #     if m:
+                    #         text_value = m.group(1).strip()
+                    #         await page.wait_for_selector(f'text="{text_value}"', timeout=8000, state="visible")
+                    #         print(f"[green]✅ Verified text present: {text_value}[/green]")
+                    #     else:
+                    #         raise ValueError("Could not extract text from has-text selector")
+
+                    elif "has-text" in target_norm:
                         m = re.search(r"has-text\(['\"](.+?)['\"]\)", target_norm)
                         if m:
                             text_value = m.group(1).strip()
+                            possible_texts = [text_value, text_value.capitalize(), text_value.upper()]
+                            found = False
+                            for t in possible_texts:
+                                try:
+                                    await page.wait_for_selector(f'text="{t}"', timeout=8000, state="visible")
+                                    print(f"[green]✅ Verified text present: {t}[/green]")
+                                    found = True
+                                    break
+                                except:
+                                    continue
+                            if not found:
+                                raise Exception(f"Element not found with text variations: {possible_texts}")
                         else:
-                            text_value = target_norm
+                            raise ValueError("Could not extract text from has-text selector")
+
+
+                    # 🟢 3️⃣ Fallback: plain visible text
                     else:
-                        text_value = target_norm
-
-                    # 2️⃣ Try common Playwright patterns — be forgiving about case
-                    possible_selectors = [
-                        f'button:has-text("{text_value}")',
-                        f'button:has-text("{text_value.capitalize()}")',
-                        f'text="{text_value}"',
-                        f'text="{text_value.capitalize()}"'
-                    ]
-
-                    found = False
-                    for sel in possible_selectors:
-                        try:
-                            await page.wait_for_selector(sel, timeout=8000, state="visible")
-                            print(f"[green]✅ Verified presence of element: {sel}[/green]")
-                            found = True
-                            break
-                        except:
-                            continue
-
-                    if not found:
-                        raise Exception(f"Element not found with text '{text_value}' in any selector.")
+                        possible_selectors = [
+                            f'text="{target_norm}"',
+                            f'text="{target_norm.capitalize()}"'
+                        ]
+                        found = False
+                        for sel in possible_selectors:
+                            try:
+                                await page.wait_for_selector(sel, timeout=8000, state="visible")
+                                print(f"[green]✅ Verified visible text: {sel}[/green]")
+                                found = True
+                                break
+                            except:
+                                continue
+                        if not found:
+                            raise Exception(f"Element not found with text or selector: {target_norm}")
 
                 except Exception as e:
                     print(f"[red]❌ Could not verify: {target} — {e}[/red]")
 
                 await page.wait_for_timeout(600)
-                await capture_state(page, step_index + 1, f"expect_{target}", app_name)
+                await capture_state(page, step_index + 1, f"expect_{target_norm}", app_name)
 
 
             elif action == "wait_for":
