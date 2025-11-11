@@ -69,7 +69,17 @@ def generate_plan(task: str):
 
     prompt = f"""
     You are Agent B. Convert the user's task into a YAML DSL plan.
-    Available actions: open, find_and_click, fill, press, expect.
+    # Available actions: open, find_and_click, fill, press, expect.
+    Available actions:
+    - open → open a URL
+    - fill → type text into an input field
+    - press → press a keyboard key like ENTER
+    - find_and_click → click buttons or links
+    - expect → verify text or element is visible
+    - mark_completed → check off a todo item containing specified text
+    - delete_todo → delete a todo item containing specified text
+    - clear_completed → click the "Clear completed" button
+
     Task: {task}
     Context from knowledge base:
     {context}

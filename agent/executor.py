@@ -6,10 +6,15 @@ from rich import print
 from pathlib import Path
 from datetime import datetime
 
-from browser.playwright_setup import get_browser_context, save_cookies
+from browser.playwright_setup import get_browser_context, save_cookies_and_state
 from agent.capture import capture_state
 from utils.dataset_summary import generate_summary
 from agent.planner import repair_plan
+from dsl.parser import load_dsl_from_dict
+
+
+# Disable HuggingFace fork warnings
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 async def execute_plan(
@@ -17,9 +22,9 @@ async def execute_plan(
     app_name="todomvc",
     task_description=None,
     repair_attempts=0,
-    max_repairs=3
+    max_repairs=3,
 ):
-    """Execute DSL plan in browser with self-repair and dataset capture."""
+    """Execute DSL plan in browser with robust error handling and dataset capture."""
 
     async_playwright, browser, context, page, cookie_path = await get_browser_context(app_name)
 
@@ -27,305 +32,190 @@ async def execute_plan(
     base_app_dir = Path(f"dataset/{app_name}")
     base_app_dir.mkdir(parents=True, exist_ok=True)
 
-    # 🧩 Create a clean descriptive folder name from user input
-    # 🧩 Create a clean descriptive folder name from user input
     def sanitize_name(text: str):
-        """Convert arbitrary user task into safe folder name"""
-        import re  # ✅ move here to ensure it always resolves in function scope
-        text = re.sub(r'[^a-zA-Z0-9]+', '_', text.lower()).strip("_")
-        return text[:50] if text else "run"
-
+        import re
+        text = re.sub(r"[^a-zA-Z0-9]+", "_", (text or "").lower()).strip("_")
+        return text[:60] if text else "run"
 
     label = sanitize_name(task_description or getattr(plan, "task_description", "run"))
-
-    # 🧮 Find next available run number
     existing_runs = [p for p in base_app_dir.glob("run_*") if p.is_dir()]
     next_index = len(existing_runs) + 1
-
-    run_id = f"run_{next_index:02d}_{label}"
-    base_dir = base_app_dir / run_id
+    base_dir = base_app_dir / f"run_{next_index:02d}_{label}"
     base_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"[blue]📁 Starting dataset capture: {base_dir}[/blue]")
 
-    # ==============================
-    # Main plan execution loop
-    # ==============================
+    # =============================
+    # Execute each DSL step
+    # =============================
     step_index = 0
     while step_index < len(plan):
         step = plan[step_index]
-        action = step.action
-        target = step.target
-        value = step.value
+        action = (step.action or "").strip().lower()
+        target = (step.target or "").strip()
+        value = (step.value or "").strip()
         print(f"[cyan]{step_index + 1}. Executing:[/cyan] {action} → {target or ''} {value or ''}")
 
         try:
             # ---------- OPEN ----------
             if action == "open":
-                await page.goto(target, wait_until="domcontentloaded", timeout=60000)
-                await page.wait_for_timeout(2000)
-                print(f"[green]Opened {target}[/green]")
+                try:
+                    await page.goto(target, wait_until="domcontentloaded", timeout=60000)
+                    await page.wait_for_timeout(1500)
+                    print(f"[green]Opened {target}[/green]")
+                except Exception as e:
+                    print(f"[red]⚠️ Failed to open {target}: {e}[/red]")
                 await capture_state(page, step_index + 1, "open", app_name, base_dir)
 
-            # ---------- CLICK ----------
+            # ---------- FIND AND CLICK ----------
             elif action == "find_and_click":
-                target_norm = target.lower().replace("'", "").replace('"', "")
-                locator = None
-
-                # Specific matches
-                if "add to cart" in target_norm:
-                    locator = page.locator('button:has-text("Add to cart")')
-                elif "remove" in target_norm:
-                    locator = page.locator('button:has-text("Remove")')
-                elif "cart" in target_norm:
-                    locator = page.locator("a.shopping_cart_link")
-
-                # Generic fallback
-                if not locator or not await locator.count():
-                    locator = page.get_by_text(target)
-
-                if locator and await locator.count():
-                    await locator.first.scroll_into_view_if_needed()
-                    await locator.first.click(timeout=10000)
-                    print(f"[green]Clicked {target}[/green]")
-                    await page.wait_for_timeout(800)
-                    await capture_state(page, step_index + 1, f"click_{target}", app_name, base_dir)
+                locator = page.get_by_text(target)
+                if not await locator.count():
+                    locator = page.locator(f"text={target}")
+                if not await locator.count():
+                    print(f"[yellow]⚠️ Element not found for '{target}'. Skipping.[/yellow]")
                 else:
-                    raise Exception(f"Could not locate element for target: {target}")
-
-            # ---------- FILL ----------
-            # elif action == "fill":
-            #     target = (target or "").strip().lower()
-            #     value = (value or "").strip()
-
-            #     if not value:
-            #         print(f"[yellow]⚠️ No value provided to fill for: {target}[/yellow]")
-            #         step_index += 1
-            #         continue
-
-            #     locator = None
-            #     try_selectors = []
-
-            #     # Direct selector check
-            #     if target.startswith(("#", ".", "input", "textarea", "[", "css=", "//")):
-            #         try_selectors.append(target.replace("css=", "").strip())
-
-            #     # Heuristic search
-            #     try_selectors += [
-            #         f"input[placeholder*='{target}']",
-            #         f"input[aria-label*='{target}']",
-            #         f"input[name*='{target}']",
-            #         "input[type='text']",
-            #         "textarea",
-            #         "input"
-            #     ]
-            #     try_selectors = list(dict.fromkeys(try_selectors))
-
-            #     for sel in try_selectors:
-            #         locator = page.locator(sel)
-            #         try:
-            #             if await locator.count():
-            #                 await locator.first.scroll_into_view_if_needed()
-            #                 await locator.first.wait_for(state="visible", timeout=2000)
-            #                 break
-            #         except:
-            #             continue
-
-            #     # Semantic fallback
-            #     if not locator or not await locator.count():
-            #         locator = page.get_by_placeholder(target)
-            #     if not locator or not await locator.count():
-            #         locator = page.get_by_label(target)
-
-            #     # Last resort
-            #     if not locator or not await locator.count():
-            #         locator = page.locator("input:not([type=hidden]), textarea").first
-
-            #     if not locator or not await locator.count():
-            #         raise Exception(f"Could not locate any fillable input for: {target}")
-
-            #     await locator.first.fill(value)
-            #     print(f"[green]Filled {target or '[detected input]'} with '{value}'[/green]")
-            #     await page.wait_for_timeout(600)
-            #     await capture_state(page, step_index + 1, f"fill_{target or 'input'}", app_name, base_dir)
+                    try:
+                        await locator.first.scroll_into_view_if_needed()
+                        await locator.first.click(timeout=5000)
+                        print(f"[green]Clicked '{target}'[/green]")
+                    except Exception as e:
+                        print(f"[red]⚠️ Click failed for '{target}': {e}[/red]")
+                await capture_state(page, step_index + 1, f"click_{target}", app_name, base_dir)
 
             # ---------- FILL ----------
             elif action == "fill":
-                target = (target or "").strip().lower()
-                value = (value or "").strip()
-
-                if not value:
-                    print(f"[yellow]⚠️ No value provided to fill for: {target}[/yellow]")
-                    step_index += 1
-                    continue
-
-                # ✅ Normalize credential fields to avoid case sensitivity issues
-                # Works for SauceDemo or other login pages
-                if "user" in target and value.upper() == "STANDARD_USER":
-                    value = "standard_user"
-                elif "pass" in target and value.upper() == "SECRET_SAUCE":
-                    value = "secret_sauce"
-
-                # ✅ Auto-normalize common credentials globally
-                value_map = {
-                    "STANDARD_USER": "standard_user",
-                    "SECRET_SAUCE": "secret_sauce",
-                    "LOCKED_OUT_USER": "locked_out_user",
-                    "PROBLEM_USER": "problem_user",
-                    "PERFORMANCE_GLITCH_USER": "performance_glitch_user",
-                }
-                if value in value_map:
-                    value = value_map[value]
-
-                locator = None
-                try_selectors = []
-
-                # Direct selector check
-                if target.startswith(("#", ".", "input", "textarea", "[", "css=", "//")):
-                    try_selectors.append(target.replace("css=", "").strip())
-
-                # Heuristic search
-                try_selectors += [
-                    f"input[placeholder*='{target}']",
-                    f"input[aria-label*='{target}']",
-                    f"input[name*='{target}']",
-                    "input[type='text']",
-                    "textarea",
-                    "input"
-                ]
-                try_selectors = list(dict.fromkeys(try_selectors))
-
-                for sel in try_selectors:
-                    locator = page.locator(sel)
-                    try:
-                        if await locator.count():
-                            await locator.first.scroll_into_view_if_needed()
-                            await locator.first.wait_for(state="visible", timeout=2000)
-                            break
-                    except:
-                        continue
-
-                # Semantic fallback
-                if not locator or not await locator.count():
-                    locator = page.get_by_placeholder(target)
-                if not locator or not await locator.count():
-                    locator = page.get_by_label(target)
-
-                # Last resort
-                if not locator or not await locator.count():
-                    locator = page.locator("input:not([type=hidden]), textarea").first
-
-                if not locator or not await locator.count():
-                    raise Exception(f"Could not locate any fillable input for: {target}")
-
-                await locator.first.fill(value)
-                print(f"[green]Filled {target or '[detected input]'} with '{value}'[/green]")
-                await page.wait_for_timeout(600)
-                await capture_state(page, step_index + 1, f"fill_{target or 'input'}", app_name, base_dir)
-
-
-            # ---------- LOGIN ----------
-            elif action == "login":
-                print("[blue]Initiating smart login sequence...[/blue]")
-                await page.goto("https://www.saucedemo.com/", wait_until="domcontentloaded", timeout=60000)
-                await page.wait_for_selector("#user-name", timeout=8000)
-                await page.wait_for_selector("#password", timeout=8000)
-
-                await page.fill("#user-name", "standard_user")
-                await page.fill("#password", "secret_sauce")
-                await page.click("#login-button")
-
-                await page.wait_for_url("**/inventory.html", timeout=10000)
-                print(f"[green]✅ Logged in successfully[/green]")
-                await capture_state(page, step_index + 1, "login_success", app_name, base_dir)
-                await page.wait_for_timeout(1000)
+                try:
+                    locator = page.locator("input.new-todo, input, textarea").first
+                    if await locator.count():
+                        await locator.fill(value)
+                        print(f"[green]Filled '{target}' with '{value}'[/green]")
+                    else:
+                        print(f"[yellow]⚠️ No input field found for '{target}'[/yellow]")
+                except Exception as e:
+                    print(f"[red]⚠️ Fill failed: {e}[/red]")
+                await capture_state(page, step_index + 1, f"fill_{target}", app_name, base_dir)
 
             # ---------- PRESS ----------
             elif action == "press":
-                target_norm = target.lower().strip()
-                if target_norm in ["enter", "tab", "escape", "space"]:
-                    field = await page.query_selector("input, textarea")
-                    if field:
-                        await field.focus()
-                    await page.keyboard.press(target_norm.capitalize())
-                    print(f"[green]Pressed key: {target_norm}[/green]")
-                else:
-                    locator = page.locator(target_norm)
-                    if not await locator.count():
-                        locator = page.get_by_text(target_norm)
-                    if await locator.count():
-                        await locator.first.click()
-                        print(f"[green]Clicked {target_norm}[/green]")
-                    else:
-                        await page.keyboard.press("Enter")
-                        print(f"[green]Pressed Enter fallback[/green]")
-                await page.wait_for_timeout(800)
-                await capture_state(page, step_index + 1, f"press_{target_norm}", app_name, base_dir)
+                try:
+                    key = target.capitalize() if target else "Enter"
+                    await page.keyboard.press(key)
+                    print(f"[green]Pressed {key}[/green]")
+                except Exception as e:
+                    print(f"[red]⚠️ Press failed: {e}[/red]")
+                await capture_state(page, step_index + 1, f"press_{target}", app_name, base_dir)
 
             # ---------- EXPECT ----------
             elif action == "expect":
-                import re
-                target_norm = target.strip().lower()
                 try:
-                    if target_norm.startswith((".", "#")) or re.match(r"^[a-z]+\.", target_norm):
-                        await page.wait_for_selector(target_norm, timeout=8000, state="visible")
-                        print(f"[green]✅ Found CSS: {target_norm}[/green]")
-                    elif "has-text" in target_norm:
-                        m = re.search(r"has-text\\(['\"](.+?)['\"]\\)", target_norm)
-                        if m:
-                            text_value = m.group(1).strip()
-                            for t in [text_value, text_value.capitalize(), text_value.upper()]:
-                                try:
-                                    await page.wait_for_selector(f'text=\"{t}\"', timeout=8000, state="visible")
-                                    print(f"[green]✅ Found text: {t}[/green]")
-                                    break
-                                except:
-                                    continue
+                    if await page.get_by_text(target).count():
+                        print(f"[green]✅ Verified visible text: '{target}'[/green]")
                     else:
-                        for sel in [f'text=\"{target_norm}\"', f'text=\"{target_norm.capitalize()}\"']:
-                            try:
-                                await page.wait_for_selector(sel, timeout=8000, state="visible")
-                                print(f"[green]✅ Verified visible text: {sel}[/green]")
-                                break
-                            except:
-                                continue
+                        print(f"[yellow]❌ Expect failed — '{target}' not found[/yellow]")
                 except Exception as e:
-                    print(f"[red]❌ Expect failed for {target}: {e}[/red]")
-                await capture_state(page, step_index + 1, f"expect_{target_norm}", app_name, base_dir)
+                    print(f"[red]⚠️ Expect lookup error for '{target}': {e}[/red]")
+                await capture_state(page, step_index + 1, f"expect_{target}", app_name, base_dir)
 
             # ---------- WAIT ----------
             elif action == "wait_for":
                 await page.wait_for_timeout(1000)
-                print(f"[yellow]Waited for {target}[/yellow]")
+                print(f"[yellow]Waited briefly ({target or '1s'})[/yellow]")
 
+            # ---------- MARK COMPLETED ----------
+            elif action == "mark_completed" and app_name == "todomvc":
+                try:
+                    todo_item = page.locator(f"li:has(label:text-is('{target}'))").first
+                    if await todo_item.count():
+                        checkbox = todo_item.locator("input.toggle")
+                        await checkbox.check()
+                        print(f"[green]✅ Marked '{target}' as completed[/green]")
+                    else:
+                        print(f"[yellow]⚠️ Todo '{target}' not found to mark complete[/yellow]")
+                except Exception as e:
+                    print(f"[red]⚠️ mark_completed failed: {e}[/red]")
+                await capture_state(page, step_index + 1, f"mark_{target}", app_name, base_dir)
+
+            # ---------- DELETE TODO ----------
+            elif action == "delete_todo" and app_name == "todomvc":
+                try:
+                    todo_item = page.locator(f"li:has(label:text-is('{target}'))").first
+                    if await todo_item.count():
+                        await todo_item.hover()
+                        destroy_btn = todo_item.locator("button.destroy")
+                        await destroy_btn.click()
+                        print(f"[green]🗑️ Deleted todo '{target}'[/green]")
+                    else:
+                        print(f"[yellow]⚠️ Todo '{target}' not found to delete[/yellow]")
+                except Exception as e:
+                    print(f"[red]⚠️ delete_todo failed: {e}[/red]")
+                await capture_state(page, step_index + 1, f"delete_{target}", app_name, base_dir)
+
+            # ---------- CLEAR COMPLETED ----------
+            # ---------- CLEAR COMPLETED ----------
+            elif action == "clear_completed" and app_name == "todomvc":
+                try:
+                    button = page.get_by_text("Clear completed")
+                    if await button.count():
+                        await button.click()
+                        print(f"[green]🧹 Cleared completed todos[/green]")
+                    else:
+                        print(f"[yellow]⚠️ 'Clear completed' button not found — deleting all todos manually[/yellow]")
+                        todos = page.locator("ul.todo-list li")
+                        count = await todos.count()
+                        if count > 0:
+                            for i in range(count):
+                                item = todos.nth(0)
+                                await item.hover()
+                                destroy_btn = item.locator("button.destroy")
+                                await destroy_btn.click()
+                                await page.wait_for_timeout(300)
+                            print(f"[green]🧹 Deleted {count} todos manually[/green]")
+                        else:
+                            print(f"[blue]ℹ️ No todos to delete[/blue]")
+                except Exception as e:
+                    print(f"[red]⚠️ clear_completed failed: {e}[/red]")
+                await capture_state(page, step_index + 1, "clear_completed", app_name, base_dir)
+
+            # elif action == "clear_completed" and app_name == "todomvc":
+            #     try:
+            #         button = page.get_by_text("Clear completed")
+            #         if await button.count():
+            #             await button.click()
+            #             print(f"[green]🧹 Cleared completed todos[/green]")
+            #         else:
+            #             print(f"[yellow]⚠️ 'Clear completed' button not found[/yellow]")
+            #     except Exception as e:
+            #         print(f"[red]⚠️ clear_completed failed: {e}[/red]")
+            #     await capture_state(page, step_index + 1, "clear_completed", app_name, base_dir)
+
+            # ---------- UNKNOWN ----------
             else:
-                print(f"[yellow]⚠️ Unknown action: {action}[/yellow]")
+                print(f"[yellow]⚠️ Unknown action '{action}', skipping...[/yellow]")
 
             step_index += 1
 
-        # ---------- SELF REPAIR ----------
         except Exception as e:
-            print(f"[red]Step failed: {action} → {target}[/red]")
-            print(f"[yellow]Triggering plan repair (attempt {repair_attempts + 1}/{max_repairs})...[/yellow]")
-
-            if repair_attempts >= max_repairs:
-                print(f"[red]❌ Max repair attempts reached. Aborting.[/red]")
-                break
-
-            try:
-                new_plan = repair_plan(step, str(e), plan)
-                if not new_plan or new_plan == plan:
-                    print("[red]⚠️ Repair failed or no new plan returned.[/red]")
+            print(f"[red]Step failed: {action} → {target} | {e}[/red]")
+            await capture_state(page, step_index + 1, f"error_{action}", app_name, base_dir)
+            if repair_attempts < max_repairs:
+                print(f"[yellow]🔁 Attempting plan repair ({repair_attempts + 1}/{max_repairs})...[/yellow]")
+                try:
+                    new_plan = repair_plan(step, str(e), plan)
+                    if new_plan and new_plan != plan:
+                        plan = new_plan
+                        repair_attempts += 1
+                        print("[cyan]🔄 Retrying repaired plan...[/cyan]")
+                        continue
+                except Exception as re:
+                    print(f"[red]Repair failed: {re}[/red]")
                     break
-                print("[cyan]🔁 Updated plan and retrying...[/cyan]")
-                plan = new_plan
-                repair_attempts += 1
-                continue
-            except Exception as re:
-                print(f"[red]Repair attempt failed: {re}[/red]")
+            else:
+                print(f"[red]❌ Max repair attempts reached, aborting further repairs.[/red]")
                 break
 
-    print("[green]✅ All steps executed (with self-repair if needed).[/green]")
+    print("[cyan]Execution complete — check logs for ⚠️ warnings or ❌ expectations.[/cyan]")
+    await save_cookies_and_state(context, app_name, cookie_path)
     await browser.close()
     await async_playwright.stop()
 
@@ -333,6 +223,7 @@ async def execute_plan(
     print(f"[green]📊 Dataset summary generated at: {base_dir}/dataset_summary.csv[/green]")
 
 
-def run_executor(plan, app_name="todomvc", task_description=None):
-    """Sync wrapper for async Playwright execution."""
-    asyncio.run(execute_plan(plan, app_name, task_description=task_description))
+def run_executor(plan_data, app_name="todomvc", task_description=None):
+    """Helper to launch async executor from synchronous main.py."""
+    plan = load_dsl_from_dict(plan_data)
+    asyncio.run(execute_plan(plan, app_name, task_description))
