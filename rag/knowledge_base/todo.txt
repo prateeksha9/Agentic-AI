@@ -1,0 +1,5 @@
+To-Do App (Playwright Demo):
+1. Open https://demo.playwright.dev/todomvc
+2. Type a new task into the input field labeled "What needs to be done?"
+3. Press Enter to add the task.
+4. Verify that the new task appears in the list below.
