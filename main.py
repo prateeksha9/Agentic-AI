@@ -14,7 +14,7 @@ from dsl.parser import load_dsl_from_dict
 # load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# 👉 Import the new intelligent planner
+# Import the new intelligent planner
 try:
     from agent.planner import generate_plan
     USE_LLM = True

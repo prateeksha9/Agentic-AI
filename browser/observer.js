@@ -1,6 +1,6 @@
 // browser/observer.js
 (() => {
-    console.log("🧭 Softlight DOM Observer initializing...");
+    console.log("Softlight DOM Observer initializing...");
   
     window._softlight_changed = false;
   

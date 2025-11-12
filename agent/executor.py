@@ -27,7 +27,7 @@ async def execute_plan(
     async_playwright, browser, context, page, cookie_path = await get_browser_context(app_name)
 
     # ─────────────────────────────────────────────────────────────
-    # 🧱 Dataset directory setup
+    # Dataset directory setup
     # ─────────────────────────────────────────────────────────────
     base_app_dir = Path(f"dataset/{app_name}")
     base_app_dir.mkdir(parents=True, exist_ok=True)
@@ -42,16 +42,16 @@ async def execute_plan(
     next_index = len(existing_runs) + 1
     base_dir = base_app_dir / f"run_{next_index:02d}_{label}"
     base_dir.mkdir(parents=True, exist_ok=True)
-    print(f"[blue]📁 Starting dataset capture: {base_dir}[/blue]")
+    print(f"[blue] Starting dataset capture: {base_dir}[/blue]")
 
     # ─────────────────────────────────────────────────────────────
-    # 🌐 LocalStorage persistence (per domain)
+    # LocalStorage persistence (per domain)
     # ─────────────────────────────────────────────────────────────
     domain = "demo.playwright.dev" if "todo" in app_name.lower() else "www.saucedemo.com"
     storage_path = f"{os.path.expanduser('~')}/.softlight/localstorage/{domain}_storage.json"
     os.makedirs(os.path.dirname(storage_path), exist_ok=True)
 
-    # ✅ Restore localStorage (after real navigation)
+    # Restore localStorage (after real navigation)
     try:
         if os.path.exists(storage_path):
             with open(storage_path, "r") as f:
@@ -72,12 +72,12 @@ async def execute_plan(
                     }}
                 """)
                 await page.reload()
-                print(f"[green]💾 Restored localStorage for {app_name}[/green]")
+                print(f"[green] Restored localStorage for {app_name}[/green]")
     except Exception as e:
-        print(f"[yellow]⚠️ Failed to restore localStorage: {e}[/yellow]")
+        print(f"[yellow] Failed to restore localStorage: {e}[/yellow]")
 
     # ─────────────────────────────────────────────────────────────
-    # 🌐 Special handling for SauceDemo (reset stale sessions)
+    #  Special handling for SauceDemo (reset stale sessions)
     # ─────────────────────────────────────────────────────────────
     if "sauce" in app_name.lower():
         try:
@@ -85,12 +85,12 @@ async def execute_plan(
             await page.wait_for_selector("#user-name", timeout=10000)
             await page.evaluate("localStorage.clear()")
             await page.wait_for_timeout(500)
-            print("[blue]🔄 Cleared stale session for SauceDemo and ready at login screen[/blue]")
+            print("[blue] Cleared stale session for SauceDemo and ready at login screen[/blue]")
         except Exception as e:
-            print(f"[yellow]⚠️ Could not reset SauceDemo session: {e}[/yellow]")
+            print(f"[yellow] Could not reset SauceDemo session: {e}[/yellow]")
 
     # ─────────────────────────────────────────────────────────────
-    # 🧭 Execute each DSL step
+    #  Execute each DSL step
     # ─────────────────────────────────────────────────────────────
     step_index = 0
     while step_index < len(plan):
@@ -101,7 +101,7 @@ async def execute_plan(
 
         print(f"[cyan]{step_index + 1}. Executing:[/cyan] {action} → {target or ''} {value or ''}")
 
-        # ✅ Normalize selectors BEFORE action branching
+        # Normalize selectors BEFORE action branching
         if action in {"find_and_click", "expect", "fill"}:
             target = target.strip().replace("BUTTON:", "button:").replace("A.", "a.")
             target = target.replace(":HAS-TEXT", ":has-text")
@@ -114,7 +114,7 @@ async def execute_plan(
                     await page.wait_for_timeout(1500)
                     print(f"[green]Opened {target}[/green]")
                 except Exception as e:
-                    print(f"[red]⚠️ Failed to open {target}: {e}[/red]")
+                    print(f"[red] Failed to open {target}: {e}[/red]")
                 await capture_state(page, step_index + 1, "open", app_name, base_dir)
 
             # ---------- FIND AND CLICK ----------
@@ -124,13 +124,13 @@ async def execute_plan(
                     if not await locator.count():
                         locator = page.get_by_text(target.strip().replace("'", "").replace('"', ""))
                     if not await locator.count():
-                        print(f"[yellow]⚠️ Element not found for '{target}'. Skipping.[/yellow]")
+                        print(f"[yellow] Element not found for '{target}'. Skipping.[/yellow]")
                     else:
                         await locator.first.scroll_into_view_if_needed()
                         await locator.first.click(timeout=5000)
                         print(f"[green]Clicked '{target}'[/green]")
                 except Exception as e:
-                    print(f"[red]⚠️ Click failed for '{target}': {e}[/red]")
+                    print(f"[red] Click failed for '{target}': {e}[/red]")
                 await capture_state(page, step_index + 1, f"click_{target}", app_name, base_dir)
 
             # ---------- FILL ----------
@@ -141,9 +141,9 @@ async def execute_plan(
                         await locator.fill(value)
                         print(f"[green]Filled '{target}' with '{value}'[/green]")
                     else:
-                        print(f"[yellow]⚠️ No input field found for '{target}'[/yellow]")
+                        print(f"[yellow] No input field found for '{target}'[/yellow]")
                 except Exception as e:
-                    print(f"[red]⚠️ Fill failed: {e}[/red]")
+                    print(f"[red] Fill failed: {e}[/red]")
                 await capture_state(page, step_index + 1, f"fill_{target}", app_name, base_dir)
 
             # ---------- PRESS ----------
@@ -153,7 +153,7 @@ async def execute_plan(
                     await page.keyboard.press(key)
                     print(f"[green]Pressed {key}[/green]")
                 except Exception as e:
-                    print(f"[red]⚠️ Press failed: {e}[/red]")
+                    print(f"[red] Press failed: {e}[/red]")
                 await capture_state(page, step_index + 1, f"press_{target}", app_name, base_dir)
 
             # ---------- EXPECT ----------
@@ -163,11 +163,11 @@ async def execute_plan(
                     if not await locator.count():
                         locator = page.get_by_text(target)
                     if await locator.count():
-                        print(f"[green]✅ Verified visible: '{target}'[/green]")
+                        print(f"[green] Verified visible: '{target}'[/green]")
                     else:
-                        print(f"[yellow]❌ Expect failed — '{target}' not found[/yellow]")
+                        print(f"[yellow] Expect failed — '{target}' not found[/yellow]")
                 except Exception as e:
-                    print(f"[red]⚠️ Expect lookup error for '{target}': {e}[/red]")
+                    print(f"[red] Expect lookup error for '{target}': {e}[/red]")
                 await capture_state(page, step_index + 1, f"expect_{target}", app_name, base_dir)
 
             # ---------- WAIT ----------
@@ -182,11 +182,11 @@ async def execute_plan(
                     if await todo_item.count():
                         checkbox = todo_item.locator("input.toggle")
                         await checkbox.check()
-                        print(f"[green]✅ Marked '{target}' as completed[/green]")
+                        print(f"[green] Marked '{target}' as completed[/green]")
                     else:
-                        print(f"[yellow]⚠️ Todo '{target}' not found to mark complete[/yellow]")
+                        print(f"[yellow] Todo '{target}' not found to mark complete[/yellow]")
                 except Exception as e:
-                    print(f"[red]⚠️ mark_completed failed: {e}[/red]")
+                    print(f"[red] mark_completed failed: {e}[/red]")
                 await capture_state(page, step_index + 1, f"mark_{target}", app_name, base_dir)
 
             # ---------- DELETE TODO ----------
@@ -197,11 +197,11 @@ async def execute_plan(
                         await todo_item.hover()
                         destroy_btn = todo_item.locator("button.destroy")
                         await destroy_btn.click()
-                        print(f"[green]🗑️ Deleted todo '{target}'[/green]")
+                        print(f"[green] Deleted todo '{target}'[/green]")
                     else:
-                        print(f"[yellow]⚠️ Todo '{target}' not found to delete[/yellow]")
+                        print(f"[yellow] Todo '{target}' not found to delete[/yellow]")
                 except Exception as e:
-                    print(f"[red]⚠️ delete_todo failed: {e}[/red]")
+                    print(f"[red] delete_todo failed: {e}[/red]")
                 await capture_state(page, step_index + 1, f"delete_{target}", app_name, base_dir)
 
             # ---------- CLEAR COMPLETED ----------
@@ -210,9 +210,9 @@ async def execute_plan(
                     button = page.get_by_text("Clear completed")
                     if await button.count():
                         await button.click()
-                        print(f"[green]🧹 Cleared completed todos[/green]")
+                        print(f"[green] Cleared completed todos[/green]")
                     else:
-                        print(f"[yellow]⚠️ 'Clear completed' button not found — deleting all todos manually[/yellow]")
+                        print(f"[yellow] 'Clear completed' button not found — deleting all todos manually[/yellow]")
                         todos = page.locator("ul.todo-list li")
                         count = await todos.count()
                         if count > 0:
@@ -222,16 +222,16 @@ async def execute_plan(
                                 destroy_btn = item.locator("button.destroy")
                                 await destroy_btn.click()
                                 await page.wait_for_timeout(300)
-                            print(f"[green]🧹 Deleted {count} todos manually[/green]")
+                            print(f"[green] Deleted {count} todos manually[/green]")
                         else:
-                            print(f"[blue]ℹ️ No todos to delete[/blue]")
+                            print(f"[blue] No todos to delete[/blue]")
                 except Exception as e:
-                    print(f"[red]⚠️ clear_completed failed: {e}[/red]")
+                    print(f"[red] clear_completed failed: {e}[/red]")
                 await capture_state(page, step_index + 1, "clear_completed", app_name, base_dir)
 
             # ---------- UNKNOWN ----------
             else:
-                print(f"[yellow]⚠️ Unknown action '{action}', skipping...[/yellow]")
+                print(f"[yellow] Unknown action '{action}', skipping...[/yellow]")
 
             step_index += 1
 
@@ -239,25 +239,25 @@ async def execute_plan(
             print(f"[red]Step failed: {action} → {target} | {e}[/red]")
             await capture_state(page, step_index + 1, f"error_{action}", app_name, base_dir)
             if repair_attempts < max_repairs:
-                print(f"[yellow]🔁 Attempting plan repair ({repair_attempts + 1}/{max_repairs})...[/yellow]")
+                print(f"[yellow] Attempting plan repair ({repair_attempts + 1}/{max_repairs})...[/yellow]")
                 try:
                     new_plan = repair_plan(step, str(e), plan)
                     if new_plan and new_plan != plan:
                         plan = new_plan
                         repair_attempts += 1
-                        print("[cyan]🔄 Retrying repaired plan...[/cyan]")
+                        print("[cyan] Retrying repaired plan...[/cyan]")
                         continue
                 except Exception as re:
                     print(f"[red]Repair failed: {re}[/red]")
                     break
             else:
-                print(f"[red]❌ Max repair attempts reached, aborting further repairs.[/red]")
+                print(f"[red] Max repair attempts reached, aborting further repairs.[/red]")
                 break
 
     # ─────────────────────────────────────────────────────────────
-    # 🏁 Wrap up & persist state
+    #  Wrap up & persist state
     # ─────────────────────────────────────────────────────────────
-    print("[cyan]Execution complete — check logs for ⚠️ warnings or ❌ expectations.[/cyan]")
+    print("[cyan]Execution complete — check logs for warnings or expectations.[/cyan]")
 
     # Save localStorage snapshot
     try:
@@ -265,9 +265,9 @@ async def execute_plan(
         with open(storage_path, "w") as f:
             import json
             json.dump(local_data, f)
-        print(f"[blue]💾 localStorage saved to {storage_path}[/blue]")
+        print(f"[blue] localStorage saved to {storage_path}[/blue]")
     except Exception as e:
-        print(f"[yellow]⚠️ Failed to save localStorage: {e}[/yellow]")
+        print(f"[yellow] Failed to save localStorage: {e}[/yellow]")
 
     await save_cookies_and_state(context, app_name, cookie_path)
     await page.wait_for_timeout(10000)
@@ -275,7 +275,7 @@ async def execute_plan(
     await async_playwright.stop()
 
     generate_summary(base_dir)
-    print(f"[green]📊 Dataset summary generated at: {base_dir}/dataset_summary.csv[/green]")
+    print(f"[green] Dataset summary generated at: {base_dir}/dataset_summary.csv[/green]")
 
 
 def run_executor(plan_data, app_name="todomvc", task_description=None):

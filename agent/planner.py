@@ -6,7 +6,7 @@ from dsl.parser import load_dsl_from_dict
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # ─────────────────────────────────────────────
-# 🧹 YAML Cleaning Utilities
+# YAML Cleaning Utilities
 # ─────────────────────────────────────────────
 def clean_yaml_block(text: str) -> str:
     """Robust cleaner for Markdown code fences (```yaml ... ```)."""
@@ -28,14 +28,14 @@ def safe_str(x):
 
 
 # ─────────────────────────────────────────────
-# 🧠 Plan Generator (LLM + RAG)
+# Plan Generator (LLM + RAG)
 # ─────────────────────────────────────────────
 def generate_plan(task: str):
     retriever = SimpleRetriever()
     retrieved = retriever.retrieve(task)
     context = "\n\n".join([f"{a.upper()}:\n{text}" for a, text in retrieved])
 
-    # 🎯 Context-aware prompt for both SauceDemo and TodoMVC
+    # Context-aware prompt for both SauceDemo and TodoMVC
     prompt = f"""
 You are Agent B, a precise automation planner.
 Convert the user's natural language task into a YAML DSL plan.
@@ -55,7 +55,7 @@ Task: {task}
 Context from knowledge base:
 {context}
 
-🔹 SauceDemo Rules:
+ SauceDemo Rules:
 - URL: https://www.saucedemo.com/
 - For login always use:
     fill → #user-name  value: standard_user
@@ -67,7 +67,7 @@ Context from knowledge base:
 - Product add button: button.btn_inventory:has-text('Add to cart')
 - Cart item selector: .cart_item
 
-🔹 TodoMVC Rules:
+ TodoMVC Rules:
 - URL: https://demo.playwright.dev/todomvc
 - To add tasks:
     fill → input.new-todo
@@ -82,7 +82,7 @@ Return ONLY valid YAML (no markdown fences).
 Each step must include 'action' and 'target', and 'value' when needed.
 """
 
-    # 🧠 Generate with GPT-4o-mini
+    # Generate with GPT-4o-mini
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
@@ -91,7 +91,7 @@ Each step must include 'action' and 'target', and 'value' when needed.
 
     plan_yaml = clean_yaml_block(response.choices[0].message.content.strip())
 
-    # 🧩 Parse safely
+    # Parse safely
     try:
         plan_dict = yaml.safe_load(plan_yaml)
     except yaml.YAMLError:
@@ -102,7 +102,7 @@ Each step must include 'action' and 'target', and 'value' when needed.
     plan_dict = normalize_plan_dict(plan_dict)
 
     # ─────────────────────────────────────────────
-    # 🔧 Smart corrections (app-specific)
+    # Smart corrections (app-specific)
     # ─────────────────────────────────────────────
     fixed = []
     task_l = task.lower()
@@ -113,6 +113,59 @@ Each step must include 'action' and 'target', and 'value' when needed.
         v = safe_str(step.get("value"))
 
         # ---------- SAUCE DEMO ----------
+        # if "sauce" in task_l:
+        #     # Case 1: Login only
+        #     if "login" in task_l and not any(k in task_l for k in ["add", "cart", "open"]):
+        #         fixed = [
+        #             {"action": "open", "target": "https://www.saucedemo.com/"},
+        #             {"action": "fill", "target": "#user-name", "value": "standard_user"},
+        #             {"action": "fill", "target": "#password", "value": "secret_sauce"},
+        #             {"action": "find_and_click", "target": "#login-button"},
+        #             {"action": "expect", "target": ".inventory_list"},
+        #         ]
+        #         break
+
+        #     # Case 2: Add to cart only
+        #     elif all(k in task_l for k in ["add", "open", "cart", "remove"]):
+        #         fixed = [
+        #             {"action": "open", "target": "https://www.saucedemo.com/"},
+        #             {"action": "fill", "target": "#user-name", "value": "standard_user"},
+        #             {"action": "fill", "target": "#password", "value": "secret_sauce"},
+        #             {"action": "find_and_click", "target": "#login-button"},
+        #             {"action": "find_and_click", "target": "button.btn_inventory:has-text('Add to cart')"},
+        #             {"action": "find_and_click", "target": "a.shopping_cart_link"},
+        #             {"action": "find_and_click", "target": "button:has-text('Remove')"},
+        #             {"action": "expect", "target": "text=Continue Shopping"},
+        #         ]
+        #         break
+
+
+        #     # Case 3: Add to cart and open cart page
+        #     elif "add" in task_l and "open" in task_l and "cart" in task_l:
+        #         fixed = [
+        #             {"action": "open", "target": "https://www.saucedemo.com/"},
+        #             {"action": "fill", "target": "#user-name", "value": "standard_user"},
+        #             {"action": "fill", "target": "#password", "value": "secret_sauce"},
+        #             {"action": "find_and_click", "target": "#login-button"},
+        #             {"action": "find_and_click", "target": "button.btn_inventory:has-text('Add to cart')"},
+        #             {"action": "find_and_click", "target": "a.shopping_cart_link"},
+        #             {"action": "expect", "target": ".cart_item"},
+        #         ]
+        #         break
+
+        #     # Case 4: Open side menu and capture options (non-URL UI state)
+        #     elif "open" in task_l and "menu" in task_l and "sauce" in task_l:
+        #         fixed = [
+        #             {"action": "open", "target": "https://www.saucedemo.com/"},
+        #             {"action": "fill", "target": "#user-name", "value": "standard_user"},
+        #             {"action": "fill", "target": "#password", "value": "secret_sauce"},
+        #             {"action": "find_and_click", "target": "#login-button"},
+        #             {"action": "find_and_click", "target": "#react-burger-menu-btn"},
+        #             {"action": "expect", "target": ".bm-menu"},
+        #         ]
+        #         break
+
+
         if "sauce" in task_l:
             # Case 1: Login only
             if "login" in task_l and not any(k in task_l for k in ["add", "cart", "open"]):
@@ -125,49 +178,49 @@ Each step must include 'action' and 'target', and 'value' when needed.
                 ]
                 break
 
-            # Case 2: Add to cart, open cart, and remove item
-            # elif all(k in task_l for k in ["add", "open", "cart", "remove"]):
-            #     fixed = [
-            #         {"action": "open", "target": "https://www.saucedemo.com/"},
-            #         {"action": "fill", "target": "#user-name", "value": "standard_user"},
-            #         {"action": "fill", "target": "#password", "value": "secret_sauce"},
-            #         {"action": "find_and_click", "target": "#login-button"},
-            #         {"action": "find_and_click", "target": "button.btn_inventory:has-text('Add to cart')"},
-            #         {"action": "find_and_click", "target": "a.shopping_cart_link"},
-            #         {"action": "find_and_click", "target": "button:has-text('Remove')"},
-            #         {"action": "expect", "target": "text=Continue Shopping"},
-            #     ]
-            #     break
-
-            # Case 2: Add to cart only
-            elif all(k in task_l for k in ["add", "open", "cart", "remove"]):
+            # 🆕 Case 2A: Add to cart only (no “open cart” mentioned)
+            elif "add" in task_l and "cart" in task_l and "remove" not in task_l and "open" not in task_l:
                 fixed = [
                     {"action": "open", "target": "https://www.saucedemo.com/"},
                     {"action": "fill", "target": "#user-name", "value": "standard_user"},
                     {"action": "fill", "target": "#password", "value": "secret_sauce"},
                     {"action": "find_and_click", "target": "#login-button"},
+                    {"action": "expect", "target": ".inventory_list"},
                     {"action": "find_and_click", "target": "button.btn_inventory:has-text('Add to cart')"},
-                    {"action": "find_and_click", "target": "a.shopping_cart_link"},
-                    {"action": "find_and_click", "target": "button:has-text('Remove')"},
-                    {"action": "expect", "target": "text=Continue Shopping"},
+                    {"action": "expect", "target": "button.btn_inventory:has-text('Remove')"},
                 ]
                 break
 
-
             # Case 3: Add to cart and open cart page
-            elif "add" in task_l and "open" in task_l and "cart" in task_l:
+            elif "add" in task_l and "open" in task_l and "cart" in task_l and "remove" not in task_l:
                 fixed = [
                     {"action": "open", "target": "https://www.saucedemo.com/"},
                     {"action": "fill", "target": "#user-name", "value": "standard_user"},
                     {"action": "fill", "target": "#password", "value": "secret_sauce"},
                     {"action": "find_and_click", "target": "#login-button"},
+                    {"action": "expect", "target": ".inventory_list"},
                     {"action": "find_and_click", "target": "button.btn_inventory:has-text('Add to cart')"},
                     {"action": "find_and_click", "target": "a.shopping_cart_link"},
                     {"action": "expect", "target": ".cart_item"},
                 ]
                 break
 
-            # Case 4: Open side menu and capture options (non-URL UI state)
+            # Case 4: Add to cart, open cart, and remove item
+            elif all(k in task_l for k in ["add", "open", "cart", "remove"]):
+                fixed = [
+                    {"action": "open", "target": "https://www.saucedemo.com/"},
+                    {"action": "fill", "target": "#user-name", "value": "standard_user"},
+                    {"action": "fill", "target": "#password", "value": "secret_sauce"},
+                    {"action": "find_and_click", "target": "#login-button"},
+                    {"action": "expect", "target": ".inventory_list"},
+                    {"action": "find_and_click", "target": "button.btn_inventory:has-text('Add to cart')"},
+                    {"action": "find_and_click", "target": "a.shopping_cart_link"},
+                    {"action": "find_and_click", "target": "button.cart_button:has-text('Remove')"},
+                    {"action": "expect", "target": "text=Continue Shopping"},
+                ]
+                break
+
+            # Case 5: Open side menu and capture options (non-URL UI state)
             elif "open" in task_l and "menu" in task_l and "sauce" in task_l:
                 fixed = [
                     {"action": "open", "target": "https://www.saucedemo.com/"},
@@ -178,6 +231,8 @@ Each step must include 'action' and 'target', and 'value' when needed.
                     {"action": "expect", "target": ".bm-menu"},
                 ]
                 break
+
+
 
         # ---------- TODO MVC ----------
         elif "todo" in task_l:
@@ -222,7 +277,7 @@ Each step must include 'action' and 'target', and 'value' when needed.
 
 
 # ─────────────────────────────────────────────
-# 🔧 Plan Repairer
+# Plan Repairer
 # ─────────────────────────────────────────────
 def repair_plan(failed_step, error_message, current_plan):
     """Ask the LLM to repair or regenerate the plan after a failure."""

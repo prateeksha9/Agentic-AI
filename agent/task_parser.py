@@ -4,17 +4,8 @@ from dsl.parser import load_dsl_from_dict
 def parse_task_to_plan(task: str):
     task_lower = task.lower()
 
-    if "notion" in task_lower and "create" in task_lower and "project" in task_lower:
-        plan = [
-            {"action": "open", "target": "https://www.notion.so"},
-            {"action": "find_and_click", "target": "New"},
-            {"action": "fill", "target": "Name", "value": "Example Project"},
-            {"action": "press", "target": "Enter"},
-            {"action": "expect", "target": "Project created"},
-        ]
-
     # --- Sauce Demo login fix ---
-    elif "sauce" in task_lower and ("login" in task_lower or "checkout" in task_lower):
+    if "sauce" in task_lower and ("login" in task_lower or "checkout" in task_lower):
         plan = [
             {"action":"open", "target":"https://www.saucedemo.com/"},
             {"action":"fill", "target":"#user-name", "value":"standard_user"},

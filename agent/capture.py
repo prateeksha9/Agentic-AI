@@ -37,4 +37,4 @@ async def capture_state(page, step_idx: int, label: str, app_name: str, base_dir
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=2)
 
-    print(f"📸 Captured: {img_path}")
+    print(f"Captured: {img_path}")
