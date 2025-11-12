@@ -202,3 +202,19 @@ You can open the Streamlit UI to visualize these steps one by one.
 
 Agent B demonstrates how a language-model-driven system can interpret instructions, plan structured actions, and autonomously execute them inside a browser while capturing every visual change.
 The combination of retrieval guidance, rule-based corrections, Playwright automation, and a Streamlit viewer makes it a complete end-to-end example of intelligent, explainable web-workflow automation.
+
+---
+
+## Demo Videos
+** Full Workflow Demonstration
+
+Link: https://www.loom.com/share/59e52f7551734166aec85b1645f56149
+
+This video walks through how Agent B interprets a natural-language command, generates a plan through the LLM + RAG planner, and autonomously executes each step in a live browser while capturing intermediate UI states. It shows both Sauce Demo and TodoMVC tasks being planned, executed, and recorded into the dataset folder.
+
+** Streamlit UI Demo
+
+Link: https://www.loom.com/share/f486fb3f5e434851a6c520bcf9edf73f
+
+This short demo highlights the Streamlit interface (app.py) that lets you run Agent B interactively.
+You can type a new task (e.g., “Add a todo and mark it completed”), trigger execution, and instantly visualize the screenshots captured from each UI step — without using the CLI.
