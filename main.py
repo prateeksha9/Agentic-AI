@@ -1,8 +1,18 @@
 # main.py
 import typer
+import os
+from dotenv import load_dotenv
+load_dotenv()
 from rich import print
 from agent.executor import run_executor
 import re
+from openai import OpenAI
+from rag.retriever import SimpleRetriever
+from dsl.parser import load_dsl_from_dict
+
+
+# load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # 👉 Import the new intelligent planner
 try:
