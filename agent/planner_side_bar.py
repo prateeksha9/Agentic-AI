@@ -5,6 +5,7 @@ from dsl.parser import load_dsl_from_dict
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+
 # ─────────────────────────────────────────────
 # 🧹 YAML Cleaning Utilities
 # ─────────────────────────────────────────────
@@ -126,20 +127,7 @@ Each step must include 'action' and 'target', and 'value' when needed.
                 break
 
             # Case 2: Add to cart, open cart, and remove item
-            # elif all(k in task_l for k in ["add", "open", "cart", "remove"]):
-            #     fixed = [
-            #         {"action": "open", "target": "https://www.saucedemo.com/"},
-            #         {"action": "fill", "target": "#user-name", "value": "standard_user"},
-            #         {"action": "fill", "target": "#password", "value": "secret_sauce"},
-            #         {"action": "find_and_click", "target": "#login-button"},
-            #         {"action": "find_and_click", "target": "button.btn_inventory:has-text('Add to cart')"},
-            #         {"action": "find_and_click", "target": "a.shopping_cart_link"},
-            #         {"action": "find_and_click", "target": "button:has-text('Remove')"},
-            #         {"action": "expect", "target": "text=Continue Shopping"},
-            #     ]
-            #     break
-
-            # Case 2: Add to cart only
+            # Case 2: Add to cart, open cart, and remove item
             elif all(k in task_l for k in ["add", "open", "cart", "remove"]):
                 fixed = [
                     {"action": "open", "target": "https://www.saucedemo.com/"},
@@ -167,6 +155,22 @@ Each step must include 'action' and 'target', and 'value' when needed.
                 ]
                 break
 
+
+
+            # Case 4: Add to cart, open cart, and remove item
+            elif all(k in task_l for k in ["add", "open", "cart", "remove"]):
+                fixed = [
+                    {"action": "open", "target": "https://www.saucedemo.com/"},
+                    {"action": "fill", "target": "#user-name", "value": "standard_user"},
+                    {"action": "fill", "target": "#password", "value": "secret_sauce"},
+                    {"action": "find_and_click", "target": "#login-button"},
+                    {"action": "find_and_click", "target": "button.btn_inventory:has-text('Add to cart')"},
+                    {"action": "find_and_click", "target": "a.shopping_cart_link"},
+                    {"action": "find_and_click", "target": "button:has-text('Remove')"},
+                    {"action": "expect", "target": "body:has-text('Your cart is empty')"},
+                ]
+                break
+
             # Case 4: Open side menu and capture options (non-URL UI state)
             elif "open" in task_l and "menu" in task_l and "sauce" in task_l:
                 fixed = [
@@ -179,32 +183,9 @@ Each step must include 'action' and 'target', and 'value' when needed.
                 ]
                 break
 
+
         # ---------- TODO MVC ----------
         elif "todo" in task_l:
-
-            # Case: Filter to show only completed todos
-            if "filter" in task_l and "completed" in task_l:
-                fixed = [
-                    {"action": "open", "target": "https://demo.playwright.dev/todomvc"},
-                    {"action": "wait_for", "target": "footer", "value": ""},
-                    {"action": "find_and_click", "target": "a[href='#/completed']"},
-                    {"action": "wait_for", "target": "ul.todo-list li.completed", "value": ""},
-                    {"action": "expect", "target": "ul.todo-list li.completed", "value": ""},
-                ]
-                break
-
-            # Case: Filter to show only active todos (optional)
-            elif "filter" in task_l and "active" in task_l:
-                fixed = [
-                    {"action": "open", "target": "https://demo.playwright.dev/todomvc"},
-                    {"action": "wait_for", "target": "footer", "value": ""},
-                    {"action": "find_and_click", "target": "a[href='#/active']"},
-                    {"action": "wait_for", "target": "ul.todo-list li:not(.completed)", "value": ""},
-                    {"action": "expect", "target": "ul.todo-list li:not(.completed)", "value": ""},
-                ]
-                break
-
-            # Generic fallback for TodoMVC
             if a == "fill" and not t:
                 t = "input.new-todo"
             elif a == "expect" and not t and v:
