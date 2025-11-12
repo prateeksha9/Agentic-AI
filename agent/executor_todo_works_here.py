@@ -77,19 +77,6 @@ async def execute_plan(
         print(f"[yellow]⚠️ Failed to restore localStorage: {e}[/yellow]")
 
     # ─────────────────────────────────────────────────────────────
-    # 🌐 Special handling for SauceDemo (reset stale sessions)
-    # ─────────────────────────────────────────────────────────────
-    if "sauce" in app_name.lower():
-        try:
-            await page.goto("https://www.saucedemo.com/")
-            await page.wait_for_selector("#user-name", timeout=10000)
-            await page.evaluate("localStorage.clear()")
-            await page.wait_for_timeout(500)
-            print("[blue]🔄 Cleared stale session for SauceDemo and ready at login screen[/blue]")
-        except Exception as e:
-            print(f"[yellow]⚠️ Could not reset SauceDemo session: {e}[/yellow]")
-
-    # ─────────────────────────────────────────────────────────────
     # 🧭 Execute each DSL step
     # ─────────────────────────────────────────────────────────────
     step_index = 0
@@ -100,11 +87,6 @@ async def execute_plan(
         value = (step.value or "").strip()
 
         print(f"[cyan]{step_index + 1}. Executing:[/cyan] {action} → {target or ''} {value or ''}")
-
-        # ✅ Normalize selectors BEFORE action branching
-        if action in {"find_and_click", "expect", "fill"}:
-            target = target.strip().replace("BUTTON:", "button:").replace("A.", "a.")
-            target = target.replace(":HAS-TEXT", ":has-text")
 
         try:
             # ---------- OPEN ----------
@@ -117,26 +99,27 @@ async def execute_plan(
                     print(f"[red]⚠️ Failed to open {target}: {e}[/red]")
                 await capture_state(page, step_index + 1, "open", app_name, base_dir)
 
+            
             # ---------- FIND AND CLICK ----------
             elif action == "find_and_click":
-                try:
-                    locator = page.locator(target)
-                    if not await locator.count():
-                        locator = page.get_by_text(target.strip().replace("'", "").replace('"', ""))
-                    if not await locator.count():
-                        print(f"[yellow]⚠️ Element not found for '{target}'. Skipping.[/yellow]")
-                    else:
+                locator = page.get_by_text(target)
+                if not await locator.count():
+                    locator = page.locator(f"text={target}")
+                if not await locator.count():
+                    print(f"[yellow]⚠️ Element not found for '{target}'. Skipping.[/yellow]")
+                else:
+                    try:
                         await locator.first.scroll_into_view_if_needed()
                         await locator.first.click(timeout=5000)
                         print(f"[green]Clicked '{target}'[/green]")
-                except Exception as e:
-                    print(f"[red]⚠️ Click failed for '{target}': {e}[/red]")
+                    except Exception as e:
+                        print(f"[red]⚠️ Click failed for '{target}': {e}[/red]")
                 await capture_state(page, step_index + 1, f"click_{target}", app_name, base_dir)
 
             # ---------- FILL ----------
             elif action == "fill":
                 try:
-                    locator = page.locator(target if target else "input.new-todo, input, textarea").first
+                    locator = page.locator("input.new-todo, input, textarea").first
                     if await locator.count():
                         await locator.fill(value)
                         print(f"[green]Filled '{target}' with '{value}'[/green]")
@@ -159,11 +142,8 @@ async def execute_plan(
             # ---------- EXPECT ----------
             elif action == "expect":
                 try:
-                    locator = page.locator(target)
-                    if not await locator.count():
-                        locator = page.get_by_text(target)
-                    if await locator.count():
-                        print(f"[green]✅ Verified visible: '{target}'[/green]")
+                    if await page.get_by_text(target).count():
+                        print(f"[green]✅ Verified visible text: '{target}'[/green]")
                     else:
                         print(f"[yellow]❌ Expect failed — '{target}' not found[/yellow]")
                 except Exception as e:
@@ -270,10 +250,10 @@ async def execute_plan(
         print(f"[yellow]⚠️ Failed to save localStorage: {e}[/yellow]")
 
     await save_cookies_and_state(context, app_name, cookie_path)
-    await page.wait_for_timeout(10000)
+    await page.wait_for_timeout(10000) 
+
     await browser.close()
     await async_playwright.stop()
-
     generate_summary(base_dir)
     print(f"[green]📊 Dataset summary generated at: {base_dir}/dataset_summary.csv[/green]")
 

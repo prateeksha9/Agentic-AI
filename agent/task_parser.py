@@ -13,6 +13,16 @@ def parse_task_to_plan(task: str):
             {"action": "expect", "target": "Project created"},
         ]
 
+    # --- Sauce Demo login fix ---
+    elif "sauce" in task_lower and ("login" in task_lower or "checkout" in task_lower):
+        plan = [
+            {"action":"open", "target":"https://www.saucedemo.com/"},
+            {"action":"fill", "target":"#user-name", "value":"standard_user"},
+            {"action":"fill", "target":"#password", "value":"secret_sauce"},
+            {"action":"click", "target":"#login-button"},
+            {"action":"expect", "target":".inventory_list"},
+        ]
+
     elif "todo" in task_lower:
         # New test case: TodoMVC app (no login)
         plan = [

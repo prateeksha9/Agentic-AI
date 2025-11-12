@@ -127,46 +127,14 @@ Each step must include 'action' and 'target', and 'value' when needed.
                 break
 
             # Case 2: Add to cart only
-            # elif "add" in task_l and "open" not in task_l:
-            #     fixed = [
-            #         {"action": "open", "target": "https://www.saucedemo.com/"},
-            #         {"action": "fill", "target": "#user-name", "value": "standard_user"},
-            #         {"action": "fill", "target": "#password", "value": "secret_sauce"},
-            #         {"action": "find_and_click", "target": "#login-button"},
-            #         {"action": "find_and_click", "target": "button.btn_inventory:has-text('Add to cart')"},
-            #         {"action": "expect", "target": "button.btn_inventory:has-text('Remove')"},
-            #     ]
-            #     break
-
-            # # Case 3: Add to cart and open cart page
-            # elif "add" in task_l and "open" in task_l and "cart" in task_l:
-            #     fixed = [
-            #         {"action": "open", "target": "https://www.saucedemo.com/"},
-            #         {"action": "fill", "target": "#user-name", "value": "standard_user"},
-            #         {"action": "fill", "target": "#password", "value": "secret_sauce"},
-            #         {"action": "find_and_click", "target": "#login-button"},
-            #         {"action": "find_and_click", "target": "button.btn_inventory:has-text('Add to cart')"},
-            #         {"action": "find_and_click", "target": "a.shopping_cart_link"},
-            #         {"action": "expect", "target": ".cart_item"},
-            #     ]
-            #     break
-
-
-            # Case 2: Add to cart, open cart, and remove item
-            elif all(k in task_l for k in ["add", "open", "cart", "remove"]):
+            elif "add" in task_l and "open" not in task_l:
                 fixed = [
                     {"action": "open", "target": "https://www.saucedemo.com/"},
                     {"action": "fill", "target": "#user-name", "value": "standard_user"},
                     {"action": "fill", "target": "#password", "value": "secret_sauce"},
                     {"action": "find_and_click", "target": "#login-button"},
-                    # Add backpack first
                     {"action": "find_and_click", "target": "button.btn_inventory:has-text('Add to cart')"},
-                    # Go to cart
-                    {"action": "find_and_click", "target": "a.shopping_cart_link"},
-                    # Remove the backpack inside cart
-                    {"action": "find_and_click", "target": "button.cart_button:has-text('Remove')"},
-                    # Expect cart to be empty (no .cart_item)
-                    {"action": "expect", "target": "text=Continue Shopping"},
+                    {"action": "expect", "target": "button.btn_inventory:has-text('Remove')"},
                 ]
                 break
 
@@ -180,22 +148,6 @@ Each step must include 'action' and 'target', and 'value' when needed.
                     {"action": "find_and_click", "target": "button.btn_inventory:has-text('Add to cart')"},
                     {"action": "find_and_click", "target": "a.shopping_cart_link"},
                     {"action": "expect", "target": ".cart_item"},
-                ]
-                break
-
-
-
-            # Case 4: Add to cart, open cart, and remove item
-            elif all(k in task_l for k in ["add", "open", "cart", "remove"]):
-                fixed = [
-                    {"action": "open", "target": "https://www.saucedemo.com/"},
-                    {"action": "fill", "target": "#user-name", "value": "standard_user"},
-                    {"action": "fill", "target": "#password", "value": "secret_sauce"},
-                    {"action": "find_and_click", "target": "#login-button"},
-                    {"action": "find_and_click", "target": "button.btn_inventory:has-text('Add to cart')"},
-                    {"action": "find_and_click", "target": "a.shopping_cart_link"},
-                    {"action": "find_and_click", "target": "button:has-text('Remove')"},
-                    {"action": "expect", "target": "body:has-text('Your cart is empty')"},
                 ]
                 break
 

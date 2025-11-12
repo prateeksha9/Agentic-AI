@@ -12,6 +12,8 @@ from utils.dataset_summary import generate_summary
 from agent.planner import repair_plan
 from dsl.parser import load_dsl_from_dict
 
+
+# Disable HuggingFace fork warnings
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
@@ -22,41 +24,24 @@ async def execute_plan(
     repair_attempts=0,
     max_repairs=3,
 ):
-    """Execute DSL plan in browser with robust error handling and persistence."""
+    """Execute DSL plan in browser with robust error handling and dataset capture."""
 
     async_playwright, browser, context, page, cookie_path = await get_browser_context(app_name)
 
-    # ─────────────────────────────────────────────────────────────
-    # 🧱 Dataset directory setup
-    # ─────────────────────────────────────────────────────────────
-    base_app_dir = Path(f"dataset/{app_name}")
-    base_app_dir.mkdir(parents=True, exist_ok=True)
-
-    def sanitize_name(text: str):
-        import re
-        text = re.sub(r"[^a-zA-Z0-9]+", "_", (text or "").lower()).strip("_")
-        return text[:60] if text else "run"
-
-    label = sanitize_name(task_description or getattr(plan, "task_description", "run"))
-    existing_runs = [p for p in base_app_dir.glob("run_*") if p.is_dir()]
-    next_index = len(existing_runs) + 1
-    base_dir = base_app_dir / f"run_{next_index:02d}_{label}"
-    base_dir.mkdir(parents=True, exist_ok=True)
-    print(f"[blue]📁 Starting dataset capture: {base_dir}[/blue]")
-
-    # ─────────────────────────────────────────────────────────────
-    # 🌐 LocalStorage persistence (per domain)
-    # ─────────────────────────────────────────────────────────────
+    
+        # --- 🧠 Persist localStorage across runs (fix for TodoMVC) ---
     domain = "demo.playwright.dev" if "todo" in app_name.lower() else "www.saucedemo.com"
     storage_path = f"{os.path.expanduser('~')}/.softlight/localstorage/{domain}_storage.json"
     os.makedirs(os.path.dirname(storage_path), exist_ok=True)
 
-    # ✅ Restore localStorage (after real navigation)
-    try:
-        if os.path.exists(storage_path):
+    # ✅ Load previous localStorage before running
+    # ✅ Load previous localStorage after navigation to a valid domain
+    if os.path.exists(storage_path):
+        try:
             with open(storage_path, "r") as f:
                 local_data = f.read().strip()
             if local_data:
+                # Navigate to real app domain first
                 start_url = (
                     "https://demo.playwright.dev/todomvc"
                     if "todo" in app_name.lower()
@@ -73,25 +58,33 @@ async def execute_plan(
                 """)
                 await page.reload()
                 print(f"[green]💾 Restored localStorage for {app_name}[/green]")
-    except Exception as e:
-        print(f"[yellow]⚠️ Failed to restore localStorage: {e}[/yellow]")
-
-    # ─────────────────────────────────────────────────────────────
-    # 🌐 Special handling for SauceDemo (reset stale sessions)
-    # ─────────────────────────────────────────────────────────────
-    if "sauce" in app_name.lower():
-        try:
-            await page.goto("https://www.saucedemo.com/")
-            await page.wait_for_selector("#user-name", timeout=10000)
-            await page.evaluate("localStorage.clear()")
-            await page.wait_for_timeout(500)
-            print("[blue]🔄 Cleared stale session for SauceDemo and ready at login screen[/blue]")
         except Exception as e:
-            print(f"[yellow]⚠️ Could not reset SauceDemo session: {e}[/yellow]")
+            print(f"[yellow]⚠️ Failed to restore localStorage: {e}[/yellow]")
 
-    # ─────────────────────────────────────────────────────────────
-    # 🧭 Execute each DSL step
-    # ─────────────────────────────────────────────────────────────
+    
+    
+    # 🧱 Base dataset directory
+    
+    
+    base_app_dir = Path(f"dataset/{app_name}")
+    base_app_dir.mkdir(parents=True, exist_ok=True)
+
+    def sanitize_name(text: str):
+        import re
+        text = re.sub(r"[^a-zA-Z0-9]+", "_", (text or "").lower()).strip("_")
+        return text[:60] if text else "run"
+
+    label = sanitize_name(task_description or getattr(plan, "task_description", "run"))
+    existing_runs = [p for p in base_app_dir.glob("run_*") if p.is_dir()]
+    next_index = len(existing_runs) + 1
+    base_dir = base_app_dir / f"run_{next_index:02d}_{label}"
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"[blue]📁 Starting dataset capture: {base_dir}[/blue]")
+
+    # =============================
+    # Execute each DSL step
+    # =============================
     step_index = 0
     while step_index < len(plan):
         step = plan[step_index]
@@ -99,12 +92,25 @@ async def execute_plan(
         target = (step.target or "").strip()
         value = (step.value or "").strip()
 
-        print(f"[cyan]{step_index + 1}. Executing:[/cyan] {action} → {target or ''} {value or ''}")
+        # ----------------------------
+        # Normalize known selectors
+        # ----------------------------
+        if app_name == "todomvc":
+            if action == "fill" and (target.lower() in ["input", "todo input", "what needs to be done?"]):
+                target = "input.new-todo"
+            elif action == "press" and target.lower() in ["input", "enter", "input.new-todo"]:
+                target = "Enter"
+            elif action == "expect" and "todo-list" in target.lower():
+                target = "ul.todo-list"
+        elif app_name == "saucedemo":
+            if target.lower() in ["#user-name", "#username"]:
+                target = "#user-name"
+            elif target.lower() == "#password":
+                target = "#password"
+            elif target.lower() in ["#login", "#login-button"]:
+                target = "#login-button"
 
-        # ✅ Normalize selectors BEFORE action branching
-        if action in {"find_and_click", "expect", "fill"}:
-            target = target.strip().replace("BUTTON:", "button:").replace("A.", "a.")
-            target = target.replace(":HAS-TEXT", ":has-text")
+        print(f"[cyan]{step_index + 1}. Executing:[/cyan] {action} → {target or ''} {value or ''}")
 
         try:
             # ---------- OPEN ----------
@@ -120,9 +126,12 @@ async def execute_plan(
             # ---------- FIND AND CLICK ----------
             elif action == "find_and_click":
                 try:
-                    locator = page.locator(target)
-                    if not await locator.count():
-                        locator = page.get_by_text(target.strip().replace("'", "").replace('"', ""))
+                    locator = None
+                    if target.startswith(("#", ".", "[", "//")) or ":" in target.lower():
+                        locator = page.locator(target)
+                    else:
+                        locator = page.get_by_text(target)
+
                     if not await locator.count():
                         print(f"[yellow]⚠️ Element not found for '{target}'. Skipping.[/yellow]")
                     else:
@@ -136,22 +145,29 @@ async def execute_plan(
             # ---------- FILL ----------
             elif action == "fill":
                 try:
-                    locator = page.locator(target if target else "input.new-todo, input, textarea").first
+                    # Wait up to 5 s for the field
+                    await page.wait_for_selector(target or "input.new-todo", timeout=5000)
+                    locator = page.locator(target or "input.new-todo")
+
                     if await locator.count():
                         await locator.fill(value)
                         print(f"[green]Filled '{target}' with '{value}'[/green]")
                     else:
                         print(f"[yellow]⚠️ No input field found for '{target}'[/yellow]")
                 except Exception as e:
-                    print(f"[red]⚠️ Fill failed: {e}[/red]")
+                    print(f"[red]⚠️ Fill failed for '{target}': {e}[/red]")
                 await capture_state(page, step_index + 1, f"fill_{target}", app_name, base_dir)
 
             # ---------- PRESS ----------
             elif action == "press":
                 try:
-                    key = target.capitalize() if target else "Enter"
-                    await page.keyboard.press(key)
-                    print(f"[green]Pressed {key}[/green]")
+                    if "input" in target or "todo" in target or target.startswith(("#", ".")):
+                        await page.keyboard.press("Enter")
+                        print(f"[green]Pressed Enter[/green]")
+                    else:
+                        key = "Enter" if not target else target.capitalize()
+                        await page.keyboard.press(key)
+                        print(f"[green]Pressed {key}[/green]")
                 except Exception as e:
                     print(f"[red]⚠️ Press failed: {e}[/red]")
                 await capture_state(page, step_index + 1, f"press_{target}", app_name, base_dir)
@@ -159,11 +175,10 @@ async def execute_plan(
             # ---------- EXPECT ----------
             elif action == "expect":
                 try:
-                    locator = page.locator(target)
-                    if not await locator.count():
-                        locator = page.get_by_text(target)
-                    if await locator.count():
+                    if await page.locator(target).count() > 0:
                         print(f"[green]✅ Verified visible: '{target}'[/green]")
+                    elif await page.get_by_text(target).count() > 0:
+                        print(f"[green]✅ Verified text: '{target}'[/green]")
                     else:
                         print(f"[yellow]❌ Expect failed — '{target}' not found[/yellow]")
                 except Exception as e:
@@ -212,7 +227,7 @@ async def execute_plan(
                         await button.click()
                         print(f"[green]🧹 Cleared completed todos[/green]")
                     else:
-                        print(f"[yellow]⚠️ 'Clear completed' button not found — deleting all todos manually[/yellow]")
+                        print(f"[yellow]⚠️ 'Clear completed' button not found — deleting manually[/yellow]")
                         todos = page.locator("ul.todo-list li")
                         count = await todos.count()
                         if count > 0:
@@ -254,12 +269,11 @@ async def execute_plan(
                 print(f"[red]❌ Max repair attempts reached, aborting further repairs.[/red]")
                 break
 
-    # ─────────────────────────────────────────────────────────────
-    # 🏁 Wrap up & persist state
-    # ─────────────────────────────────────────────────────────────
+    # =============================
+    # Finalize
+    # =============================
     print("[cyan]Execution complete — check logs for ⚠️ warnings or ❌ expectations.[/cyan]")
-
-    # Save localStorage snapshot
+        # ✅ Save localStorage at end of run
     try:
         local_data = await page.evaluate("() => Object.fromEntries(Object.entries(localStorage))")
         with open(storage_path, "w") as f:
@@ -269,8 +283,12 @@ async def execute_plan(
     except Exception as e:
         print(f"[yellow]⚠️ Failed to save localStorage: {e}[/yellow]")
 
+    
     await save_cookies_and_state(context, app_name, cookie_path)
-    await page.wait_for_timeout(10000)
+
+    # 🕒 Wait a few seconds so user can observe browser
+    await page.wait_for_timeout(5000)
+
     await browser.close()
     await async_playwright.stop()
 
