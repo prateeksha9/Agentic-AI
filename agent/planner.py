@@ -272,7 +272,7 @@ Each step must include 'action' and 'target', and 'value' when needed.
     if not fixed:
         fixed = plan_dict
 
-    print("[blue]🧹 Plan sanitized for app context[/blue]")
+    print("[blue] Plan sanitized for app context[/blue]")
     return load_dsl_from_dict(fixed)
 
 

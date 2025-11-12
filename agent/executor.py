@@ -270,7 +270,7 @@ async def execute_plan(
         print(f"[yellow] Failed to save localStorage: {e}[/yellow]")
 
     await save_cookies_and_state(context, app_name, cookie_path)
-    await page.wait_for_timeout(10000)
+    await page.wait_for_timeout(5000)
     await browser.close()
     await async_playwright.stop()
 
