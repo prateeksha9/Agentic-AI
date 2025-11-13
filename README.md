@@ -1,8 +1,3 @@
-Here’s the final version of your **README.md** — complete, human-readable, and suitable for your submission.
-It now includes the detailed **setup and run instructions from scratch**, including how to create a virtual environment, install dependencies, configure `.env`, and run both the CLI and Streamlit app.
-
----
-
 # Softlight AI Automation Agent – Project Documentation
 
 This project implements **Agent B**, an intelligent browser automation system that can understand natural-language tasks such as
