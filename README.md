@@ -1,4 +1,4 @@
-# Softlight AI Automation Agent – Project Documentation
+# Agentic AI
 
 This project implements **Agent B**, an intelligent browser automation system that can understand natural-language tasks such as
 “Login to Sauce Demo with standard_user credentials” or “Add tasks in the Todo MVC app” and automatically perform them inside a real browser while capturing every UI state.
