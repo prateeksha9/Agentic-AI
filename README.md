@@ -201,15 +201,15 @@ The combination of retrieval guidance, rule-based corrections, Playwright automa
 ---
 
 ## Demo Videos
-** Full Workflow Demonstration
+Full Workflow Demonstration
 
 Link: https://drive.google.com/file/d/10AZ6aVv8UxlqFjudcZE43SgqRuK47yOq/view?usp=sharing
 
 This video walks through how Agent B interprets a natural-language command, generates a plan through the LLM + RAG planner, and autonomously executes each step in a live browser while capturing intermediate UI states. It shows both Sauce Demo and TodoMVC tasks being planned, executed, and recorded into the dataset folder.
 
-** Streamlit UI Demo
+Streamlit UI Demo
 
-Link: https://www.loom.com/share/f486fb3f5e434851a6c520bcf9edf73f
+Link: https://drive.google.com/file/d/1Yzd9XxYTEgvno09yyLXfcajkW966TGVp/view?usp=sharing
 
 This short demo highlights the Streamlit interface (app.py) that lets you run Agent B interactively.
 You can type a new task (e.g., “Add a todo and mark it completed”), trigger execution, and instantly visualize the screenshots captured from each UI step — without using the CLI.
