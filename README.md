@@ -203,7 +203,7 @@ The combination of retrieval guidance, rule-based corrections, Playwright automa
 ## Demo Videos
 ** Full Workflow Demonstration
 
-Link: https://www.loom.com/share/59e52f7551734166aec85b1645f56149
+Link: https://drive.google.com/file/d/10AZ6aVv8UxlqFjudcZE43SgqRuK47yOq/view?usp=sharing
 
 This video walks through how Agent B interprets a natural-language command, generates a plan through the LLM + RAG planner, and autonomously executes each step in a live browser while capturing intermediate UI states. It shows both Sauce Demo and TodoMVC tasks being planned, executed, and recorded into the dataset folder.
 
